@@ -541,7 +541,7 @@ button { cursor: pointer; border: none; background: transparent; transition: 0.2
 }
 
 .product-card {
-  width: 240px; /* Fixed width for consistency in flex layout */
+  width: min(240px, 100%); /* Responsive width on very small screens */
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
@@ -2289,4 +2289,73 @@ button { cursor: pointer; border: none; background: transparent; transition: 0.2
 .about-support-row a {
   color: inherit;
   text-decoration: underline;
+}
+
+/* Mobile responsiveness pass */
+@media (max-width: 768px) {
+  .nav-links {
+    flex-wrap: wrap;
+    gap: 18px;
+    justify-content: center;
+  }
+
+  .nav-link {
+    font-size: 12px;
+    padding: 6px 0;
+  }
+
+  .nav-actions {
+    gap: 10px;
+  }
+
+  .hero {
+    padding: 130px 16px;
+  }
+
+  .hero h1 {
+    font-size: 44px;
+  }
+
+  .hero p {
+    font-size: 16px;
+    margin-bottom: 32px;
+  }
+}
+
+@media (max-width: 480px) {
+  .product-grid {
+    gap: 16px;
+    margin: 12px 0;
+  }
+
+  .action-row {
+    grid-template-columns: 1fr !important;
+  }
+
+  .hero {
+    padding: 110px 12px;
+  }
+
+  .hero h1 {
+    font-size: 34px;
+  }
+
+  .hero p {
+    font-size: 15px;
+  }
+
+  .admin-products-grid {
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  }
+
+  .admin-product-image {
+    height: 140px;
+  }
+
+  /* Footer inline grid override on small screens */
+  .site-footer > .container {
+    grid-template-columns: 1fr !important;
+    justify-items: center;
+    text-align: center;
+  }
 }
