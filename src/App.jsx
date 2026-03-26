@@ -5,7 +5,8 @@ import axios from 'axios'
 import './App.css'
 
 // API Base URL
-const API_URL = 'http://localhost:5001/api'
+// Backend routes are mounted under `/api/...`
+const API_URL = 'https://sports-hub-backend-c1ba.onrender.com/api'
 
 // --- CONTEXT ---
 const ThemeContext = createContext()
