@@ -1,5 +1,5 @@
-import React, { useMemo, useState, useEffect, createContext, useContext, useCallback } from 'react'
-import { BrowserRouter as Router, Routes, Route, Link, NavLink, useNavigate, useLocation } from 'react-router-dom'
+import React, { useMemo, useState, useEffect, useRef, createContext, useContext, useCallback } from 'react'
+import { BrowserRouter as Router, Routes, Route, Link, NavLink, Navigate, useNavigate, useLocation } from 'react-router-dom'
 import { ShoppingCart, User, Search, MessageCircle, Menu, X, Plus, Trash, Check, Truck, Package, Clock, ShieldCheck, ChevronRight, LayoutDashboard, Shirt, FileText, ClipboardList, ArrowUpDown, ChevronDown, Edit, Trash2, GripVertical, Sun, Moon, Download, Mail, Phone, Heart } from 'lucide-react'
 import axios from 'axios'
 import './App.css'
@@ -131,8 +131,8 @@ const Navbar = () => {
           <img src="/logo.png" style={{ height: 60, width: 'auto', borderRadius: 8 }} alt="Elite Sports Hub Logo" />
         </Link>
         <div className="nav-links">
-          <NavLink to="/" className="nav-link">Home</NavLink>
           <NavLink to="/shop" className="nav-link">Shop</NavLink>
+          <NavLink to="/home" className="nav-link">Home</NavLink>
           <NavLink to="/pages/about" className="nav-link">About</NavLink>
         </div>
         <div className="nav-actions">
@@ -237,6 +237,13 @@ const Shop = () => {
   const [products, setProducts] = useState([])
   const [loading, setLoading] = useState(true)
   const [filtersOpen, setFiltersOpen] = useState(false)
+  const [featuredIdx, setFeaturedIdx] = useState(0)
+  const [featuredPaused, setFeaturedPaused] = useState(false)
+  const [visibleCount, setVisibleCount] = useState(24)
+  const loadMoreRef = useRef(null)
+  const [heroPrevImg, setHeroPrevImg] = useState(null)
+  const [heroImg, setHeroImg] = useState(null)
+  const [heroFading, setHeroFading] = useState(false)
   const [filters, setFilters] = useState({
     q: '',
     brand: '',
@@ -334,41 +341,225 @@ const Shop = () => {
     return result
   }, [products, filters])
 
+  // Lazy-load products (infinite scroll)
+  useEffect(() => {
+    // Reset when filters change so user sees top results first
+    setVisibleCount(24)
+  }, [filters])
+
+  useEffect(() => {
+    const el = loadMoreRef.current
+    if (!el) return
+    if (loading) return
+    if (visibleCount >= filtered.length) return
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const [entry] = entries
+        if (!entry?.isIntersecting) return
+        setVisibleCount((c) => Math.min(filtered.length, c + 36))
+      },
+      { root: null, rootMargin: '2400px 0px', threshold: 0.01 }
+    )
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [filtered.length, loading, visibleCount])
+
+  const featuredSlides = useMemo(() => {
+    const featured = products.filter(p => p?.featured)
+    const base = featured.length ? featured : products.slice(0, 4)
+    const slides = []
+    for (const p of base) {
+      const imgs = (p?.images || [])
+        .map(x => String(x || ''))
+        .filter(Boolean)
+        .filter(img => !/\.heic$/i.test(img))
+        .slice(0, 4)
+      for (let i = 0; i < imgs.length; i++) {
+        slides.push({ id: `${p.id || 'p'}-${i}`, product: p, image: imgs[i] })
+      }
+      if (!imgs.length) {
+        slides.push({
+          id: `${p.id || 'p'}-fallback`,
+          product: p,
+          image: 'https://images.unsplash.com/photo-1577224969296-c27e7cb3d676?q=80&w=1400'
+        })
+      }
+    }
+    // keep it clean + performant
+    return slides.slice(0, 10)
+  }, [products])
+
+  useEffect(() => {
+    if (featuredIdx > Math.max(0, featuredSlides.length - 1)) setFeaturedIdx(0)
+  }, [featuredIdx, featuredSlides.length])
+
+  useEffect(() => {
+    if (featuredPaused) return
+    if (featuredSlides.length <= 1) return
+    const t = setInterval(() => {
+      setFeaturedIdx(i => (i + 1) % featuredSlides.length)
+    }, 3200)
+    return () => clearInterval(t)
+  }, [featuredPaused, featuredSlides.length])
+
+  const activeSlide = featuredSlides[featuredIdx] || null
+  const activeFeatured = activeSlide?.product || null
+  const featuredImage = activeSlide?.image || 'https://images.unsplash.com/photo-1577224969296-c27e7cb3d676?q=80&w=1400'
+
+  // Smooth cross-fade between featured images
+  useEffect(() => {
+    if (!featuredImage) return
+    if (!heroImg) {
+      setHeroImg(featuredImage)
+      return
+    }
+    if (featuredImage === heroImg) return
+
+    setHeroPrevImg(heroImg)
+    setHeroImg(featuredImage)
+    setHeroFading(true)
+
+    const t = setTimeout(() => {
+      setHeroPrevImg(null)
+      setHeroFading(false)
+    }, 650)
+
+    return () => clearTimeout(t)
+  }, [featuredImage, heroImg])
+
+  const scrollToProducts = () => {
+    const el = document.getElementById('shop-products')
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+
   return (
-    <div className="container" style={{ paddingTop: 12 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 20, marginBottom: 16 }}>
-        <h1 style={{ fontSize: 24, margin: 0, whiteSpace: 'nowrap' }}>Elite Collection</h1>
-        <div className="filters-shell" style={{ flex: 1, marginTop: 0 }}>
-          <div className="filters-search" style={{ flex: 1 }}>
-            <Search size={16} />
-            <input
-              className="filter-input"
-              placeholder="Search jerseys..."
-              value={filters.q}
-              onChange={e => setFilters({ ...filters, q: e.target.value })}
+    <div className="shop-page">
+      <div
+        className="shop-feature-hero"
+        onMouseEnter={() => setFeaturedPaused(true)}
+        onMouseLeave={() => setFeaturedPaused(false)}
+        onFocusCapture={() => setFeaturedPaused(true)}
+        onBlurCapture={() => setFeaturedPaused(false)}
+      >
+        <div className="shop-feature-media" aria-hidden="true">
+          {heroPrevImg && (
+            <img
+              src={heroPrevImg}
+              alt=""
+              className="shop-feature-bg is-prev"
+              loading="eager"
             />
+          )}
+          <img
+            src={heroImg || featuredImage}
+            alt=""
+            className={`shop-feature-bg is-current ${heroFading ? 'fade-in' : ''}`}
+            loading="eager"
+          />
+        </div>
+        <div className="shop-feature-overlay" />
+        <div className="shop-feature-inner">
+          <div className="shop-feature-top">
+            <div className="shop-kicker">Featured</div>
+            <div className="shop-feature-controls">
+              <button
+                type="button"
+                className="shop-feature-nav"
+                onClick={() => setFeaturedIdx(i => (i - 1 + featuredSlides.length) % Math.max(1, featuredSlides.length))}
+                aria-label="Previous featured"
+              >
+                ‹
+              </button>
+              <button
+                type="button"
+                className="shop-feature-nav"
+                onClick={() => setFeaturedIdx(i => (i + 1) % Math.max(1, featuredSlides.length))}
+                aria-label="Next featured"
+              >
+                ›
+              </button>
+            </div>
           </div>
-          <div className="filters-actions" style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-            {hasActiveFilters && (
-                <button 
-                  className="btn btn-ghost" 
-                  style={{ fontSize: 13, color: 'var(--text-dim)', padding: '0 8px' }}
-                  onClick={clearFilters}
-                >
-                    Clear All
+
+          <div className="shop-feature-content">
+            <div className="shop-feature-card">
+              <h1 className="shop-feature-title">{activeFeatured ? activeFeatured.name : 'Elite Collection'}</h1>
+              <p className="shop-feature-subtitle">
+                {activeFeatured
+                  ? `${activeFeatured.brand ? `${activeFeatured.brand} • ` : ''}${activeFeatured.audience || 'Unisex'} • Premium quality kits`
+                  : 'Premium quality kits, fast delivery across Nepal.'}
+              </p>
+
+              {activeFeatured && (
+                <div className="shop-feature-meta">
+                  {activeFeatured.category && <span className="shop-badge">{activeFeatured.category}</span>}
+                  <span className="shop-badge">Rs. {(activeFeatured.discount_price || activeFeatured.price || 0).toLocaleString()}</span>
+                  {activeFeatured.player && <span className="shop-badge">{activeFeatured.player}</span>}
+                </div>
+              )}
+
+              <div className="shop-feature-actions">
+                <button type="button" className="btn btn-primary shop-now-btn" onClick={scrollToProducts}>
+                  Shop Now
                 </button>
-            )}
-            <button
-              className="btn btn-outline filters-toggle"
-              style={{ padding: '8px 16px', background: hasActiveFilters ? 'rgba(255,255,255,0.05)' : 'transparent' }}
-              type="button"
-              onClick={() => setFiltersOpen(v => !v)}
-            >
-              Filters
-            </button>
+                {activeFeatured && (
+                  <Link to={`/product/${activeFeatured.id}`} className="btn btn-outline shop-view-btn">
+                    View Product
+                  </Link>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="shop-feature-dots" aria-label="Featured carousel">
+            {featuredSlides.map((s, idx) => (
+              <button
+                key={s.id || idx}
+                type="button"
+                className={`shop-dot ${idx === featuredIdx ? 'active' : ''}`}
+                onClick={() => setFeaturedIdx(idx)}
+                aria-label={`Featured item ${idx + 1}`}
+              />
+            ))}
           </div>
         </div>
       </div>
+
+      <div className="container" style={{ paddingTop: 12 }}>
+        <div className="shop-toolbar-card">
+          <div className="shop-toolbar">
+            <div className="filters-search shop-search" style={{ flex: 1 }}>
+              <Search size={16} />
+              <input
+                className="filter-input"
+                placeholder="Search by team, brand, category, or player..."
+                value={filters.q}
+                onChange={e => setFilters({ ...filters, q: e.target.value })}
+              />
+            </div>
+
+            <div className="shop-toolbar-actions">
+              {hasActiveFilters && (
+                <button className="btn btn-ghost shop-clear" onClick={clearFilters} type="button">
+                  Clear
+                </button>
+              )}
+              <button className="btn btn-outline filters-toggle" type="button" onClick={() => setFiltersOpen(v => !v)}>
+                {filtersOpen ? 'Hide Filters' : 'More Filters'}
+              </button>
+            </div>
+          </div>
+
+          <div className="shop-quick-filters">
+            <button type="button" className={`shop-chip ${filters.audience === '' ? 'active' : ''}`} onClick={() => setFilters({ ...filters, audience: '' })}>All</button>
+            <button type="button" className={`shop-chip ${filters.audience === 'Men' ? 'active' : ''}`} onClick={() => setFilters({ ...filters, audience: 'Men' })}>Men</button>
+            <button type="button" className={`shop-chip ${filters.audience === 'Women' ? 'active' : ''}`} onClick={() => setFilters({ ...filters, audience: 'Women' })}>Women</button>
+            <button type="button" className={`shop-chip ${filters.audience === 'Kids' ? 'active' : ''}`} onClick={() => setFilters({ ...filters, audience: 'Kids' })}>Kids</button>
+            <button type="button" className={`shop-chip ${filters.inStockOnly ? 'active' : ''}`} onClick={() => setFilters({ ...filters, inStockOnly: !filters.inStockOnly })}>In Stock</button>
+            <button type="button" className={`shop-chip ${filters.onSale ? 'active sale' : ''}`} onClick={() => setFilters({ ...filters, onSale: !filters.onSale })}>On Sale</button>
+          </div>
+        </div>
 
       {filtersOpen && (
         <div className="filters-panel compact" style={{ marginBottom: 24 }}>
@@ -487,13 +678,29 @@ const Shop = () => {
         </div>
       </div>
 
-      {loading ? <div className="loading"><div className="spinner"></div></div> : (
-        <div className="product-grid">
-          {filtered.map(p => (
-            <ProductCard key={p.id} product={p} />
-          ))}
-        </div>
-      )}
+        {loading ? <div className="loading"><div className="spinner"></div></div> : (
+          <div id="shop-products" className="product-grid">
+            {filtered.slice(0, visibleCount).map(p => (
+              <ProductCard key={p.id} product={p} />
+            ))}
+          </div>
+        )}
+
+        {!loading && filtered.length > 0 && visibleCount < filtered.length && (
+          <div style={{ display: 'flex', justifyContent: 'center', padding: '18px 0 10px' }}>
+            <button
+              type="button"
+              className="btn btn-outline"
+              onClick={() => setVisibleCount(c => Math.min(filtered.length, c + 36))}
+            >
+              Load more
+            </button>
+          </div>
+        )}
+
+        {/* Sentinel for infinite scroll */}
+        <div ref={loadMoreRef} style={{ height: 1 }} />
+      </div>
     </div>
   )
 }
@@ -2114,7 +2321,8 @@ function App() {
       <Router>
         <Navbar />
         <Routes>
-          <Route path="/" element={<Home />} />
+          <Route path="/" element={<Navigate to="/shop" replace />} />
+          <Route path="/home" element={<Home />} />
           <Route path="/shop" element={<Shop />} />
           <Route path="/product/:id" element={<ProductDetail />} />
           <Route path="/cart" element={<Cart />} />
