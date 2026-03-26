@@ -52,6 +52,7 @@ const useCart = () => useContext(CartContext)
 const CartProvider = ({ children }) => {
   const [cart, setCart] = useState([])
   const [isCartOpen, setIsCartOpen] = useState(false)
+  const [cartNotice, setCartNotice] = useState('')
   const addToCart = (product, size, color, quantity = 1) => {
     const existing = cart.find(item => item.id === product.id && item.size === size && item.color === color)
     if (existing) {
@@ -59,6 +60,7 @@ const CartProvider = ({ children }) => {
     } else {
       setCart([...cart, { ...product, size, color, quantity }])
     }
+    setCartNotice(`Added ${quantity} x ${product?.name || 'item'} to cart`)
   }
   const removeFromCart = (index) => setCart(cart.filter((_, i) => i !== index))
   const updateQuantity = (index, delta) => {
@@ -72,8 +74,16 @@ const CartProvider = ({ children }) => {
   }
   const clearCart = () => setCart([])
   const total = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0)
+  const cartCount = cart.reduce((sum, item) => sum + Number(item.quantity || 0), 0)
+
+  useEffect(() => {
+    if (!cartNotice) return
+    const t = setTimeout(() => setCartNotice(''), 1700)
+    return () => clearTimeout(t)
+  }, [cartNotice])
+
   return (
-    <CartContext.Provider value={{ cart, addToCart, removeFromCart, updateQuantity, clearCart, total, isCartOpen, setIsCartOpen }}>
+    <CartContext.Provider value={{ cart, cartCount, cartNotice, addToCart, removeFromCart, updateQuantity, clearCart, total, isCartOpen, setIsCartOpen }}>
       {children}
     </CartContext.Provider>
   )
@@ -121,7 +131,7 @@ const AdminLogin = () => {
 // --- COMPONENTS ---
 
 const Navbar = () => {
-  const { cart } = useCart()
+  const { cartCount } = useCart()
   const { theme, toggleTheme } = useTheme()
 
   return (
@@ -141,7 +151,7 @@ const Navbar = () => {
           </button>
           <Link to="/cart" className="btn-ghost" style={{ position: 'relative' }}>
             <ShoppingCart size={26} strokeWidth={2.5} />
-            {cart.length > 0 && <span className="badge-cart">{cart.length}</span>}
+            {cartCount > 0 && <span className="badge-cart">{cartCount > 99 ? '99+' : cartCount}</span>}
           </Link>
         </div>
       </div>
@@ -707,6 +717,21 @@ const Shop = () => {
 
 const ProductCard = ({ product, showFeaturedToggle = false, onToggleFeatured }) => {
   const { addToCart } = useCart()
+  const [added, setAdded] = useState(false)
+  const addedTimer = useRef(null)
+
+  useEffect(() => {
+    return () => {
+      if (addedTimer.current) clearTimeout(addedTimer.current)
+    }
+  }, [])
+
+  const handleAdd = () => {
+    addToCart(product, 'M', 'Home')
+    setAdded(true)
+    if (addedTimer.current) clearTimeout(addedTimer.current)
+    addedTimer.current = setTimeout(() => setAdded(false), 1400)
+  }
 
   return (
     <div className="product-card">
@@ -735,7 +760,9 @@ const ProductCard = ({ product, showFeaturedToggle = false, onToggleFeatured }) 
           </div>
           <div className="action-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 12 }}>
              <Link to={`/product/${product.id}`} className="btn btn-outline" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '10px 0', fontSize: 13, borderRadius: 10 }}>Details</Link>
-             <button onClick={() => addToCart(product, 'M', 'Home')} className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '10px 0', fontSize: 13, borderRadius: 10 }}>Add Cart</button>
+             <button onClick={handleAdd} className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '10px 0', fontSize: 13, borderRadius: 10, background: added ? '#16a34a' : undefined }}>
+               {added ? 'Added ✓' : 'Add Cart'}
+             </button>
           </div>
 
           {showFeaturedToggle && (
@@ -766,6 +793,7 @@ const ProductDetail = () => {
   const [color, setColor] = useState('Home')
   const [activeImg, setActiveImg] = useState(0)
   const [quantity, setQuantity] = useState(1)
+  const [addedToCart, setAddedToCart] = useState(false)
   const [reviews, setReviews] = useState([])
   const [reviewForm, setReviewForm] = useState({ name: '', rating: 5, comment: '' })
   const [loading, setLoading] = useState(true)
@@ -907,8 +935,12 @@ const ProductDetail = () => {
               <span>{quantity}</span>
               <button type="button" onClick={() => setQuantity(q => Math.min(Number(product.stock?.[size] || 1), q + 1))}>+</button>
             </div>
-            <button className="btn btn-primary pd-add-btn" onClick={() => addToCart(product, size, color, quantity)}>
-              ADD TO CART
+            <button className="btn btn-primary pd-add-btn" onClick={() => {
+              addToCart(product, size, color, quantity)
+              setAddedToCart(true)
+              setTimeout(() => setAddedToCart(false), 1400)
+            }} style={{ background: addedToCart ? '#16a34a' : undefined }}>
+              {addedToCart ? 'ADDED ✓' : 'ADD TO CART'}
             </button>
           </div>
           
@@ -2056,23 +2088,51 @@ const AdminProducts = () => {
 }
 
 const DynamicPage = () => {
-    const [page, setPage] = useState(null)
     const slug = window.location.pathname.split('/').pop()
+    const aboutSupportEmail = 'elitesportsh@gmail.com'
+    const isAbout = slug === 'about'
+
+    // Always render About even if the pages API is down / empty.
+    const aboutFallback = useMemo(() => ({
+      slug: 'about',
+      title: 'About Elite Sports Hub',
+      content: ''
+    }), [])
+
+    const [page, setPage] = useState(() => (isAbout ? aboutFallback : null))
 
     useEffect(() => {
-        // Fetch specific page by slug (logic simplified for demo)
         axios.get(`${API_URL}/pages`).then(res => {
-            const p = res.data.find(x => x.slug === slug)
-            setPage(p)
+            const p = (res.data || []).find(x => x.slug === slug)
+            if (p) setPage(p)
+            else if (isAbout) setPage(aboutFallback)
+        }).catch(() => {
+            if (isAbout) setPage(aboutFallback)
         })
-    }, [slug])
+    }, [slug, isAbout, aboutFallback])
 
     if (!page) return <div className="loading"><div className="spinner"></div></div>
 
-    const aboutSupportEmail = 'elitesportsh@gmail.com'
-    const isAbout = slug === 'about'
     const aboutHtml = isAbout
-        ? String(page.content || '').replace(/\bNepal\b/gi, 'Nepal 🇳🇵')
+        ? `
+          <p><strong>Elite Sports Hub</strong> is Nepal 🇳🇵’s destination for authentic jerseys and elite sportswear.</p>
+          <p>We are based in <strong>Butwal, Nepal 🇳🇵</strong> and deliver nationwide with a focus on quality, comfort, and authenticity.</p>
+          <p>
+            For <strong>support</strong> or <strong>collaboration</strong>, reach out anytime via email below.
+          </p>
+          <p style="margin-top: 18px;"><strong>Follow us</strong></p>
+          <div class="about-social-icons" aria-label="Elite Sports Hub social links">
+            <a class="about-social-btn" href="https://www.instagram.com/the.elitesports.hub/" target="_blank" rel="noopener noreferrer" aria-label="Instagram">
+              <img src="https://img.icons8.com/ios-filled/24/ffffff/instagram-new.png" alt="" />
+            </a>
+            <a class="about-social-btn" href="https://www.facebook.com/profile.php?id=61564282143433" target="_blank" rel="noopener noreferrer" aria-label="Facebook">
+              <img src="https://img.icons8.com/ios-filled/24/ffffff/facebook-new.png" alt="" />
+            </a>
+            <a class="about-social-btn" href="https://www.tiktok.com/@elite.sports.hub" target="_blank" rel="noopener noreferrer" aria-label="TikTok">
+              <img src="https://img.icons8.com/ios-filled/24/ffffff/tiktok.png" alt="" />
+            </a>
+          </div>
+        `
         : ''
 
     return (
@@ -2314,12 +2374,19 @@ const Footer = () => {
 }
 
 function App() {
+  const CartNotice = () => {
+    const { cartNotice } = useCart()
+    if (!cartNotice) return null
+    return <div className="cart-toast">{cartNotice}</div>
+  }
+
   return (
     <ThemeProvider>
     <AuthProvider>
     <CartProvider>
       <Router>
         <Navbar />
+        <CartNotice />
         <Routes>
           <Route path="/" element={<Navigate to="/shop" replace />} />
           <Route path="/home" element={<Home />} />

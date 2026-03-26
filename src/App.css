@@ -994,15 +994,37 @@ button { cursor: pointer; border: none; background: transparent; transition: 0.2
   right: -5px;
   background: var(--primary-accent);
   color: white;
-  border-radius: 50%;
-  width: 20px;
+  border-radius: 999px;
+  min-width: 20px;
   height: 20px;
+  padding: 0 6px;
   font-size: 11px;
   font-weight: 700;
   display: flex;
   align-items: center;
   justify-content: center;
   box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+.cart-toast {
+  position: fixed;
+  top: calc(var(--header-height) + 14px);
+  right: 18px;
+  z-index: 1300;
+  background: rgba(2, 6, 23, 0.92);
+  color: #fff;
+  border: 1px solid rgba(37, 99, 235, 0.65);
+  border-radius: 12px;
+  padding: 10px 14px;
+  font-size: 13px;
+  font-weight: 700;
+  box-shadow: 0 14px 30px -18px rgba(37, 99, 235, 0.8);
+  animation: cartToastIn 220ms ease;
+}
+
+@keyframes cartToastIn {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .whatsapp-float {
@@ -2551,8 +2573,11 @@ button { cursor: pointer; border: none; background: transparent; transition: 0.2
   padding: 44px 28px;
   border-radius: 28px;
   border: 1px solid var(--border);
-  background: linear-gradient(180deg, rgba(37, 99, 235, 0.18), rgba(2, 6, 23, 0.22));
+  background: linear-gradient(180deg, rgba(37, 99, 235, 0.22), rgba(2, 6, 23, 0.28));
   text-align: center;
+  box-shadow: 0 20px 40px -28px rgba(0,0,0,0.65);
+  margin-top: 22px;
+  min-height: 420px;
 }
 
 .about-country-pill {
@@ -2592,6 +2617,12 @@ button { cursor: pointer; border: none; background: transparent; transition: 0.2
   align-items: center;
 }
 
+.about-content a {
+  color: var(--primary-accent);
+  font-weight: 900;
+  text-decoration: underline;
+}
+
 .about-content p {
   text-align: center !important;
   margin: 12px 0;
@@ -2599,6 +2630,50 @@ button { cursor: pointer; border: none; background: transparent; transition: 0.2
 
 .about-content * {
   text-align: center !important;
+}
+
+.about-socials {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  justify-content: center;
+}
+
+.about-dot {
+  opacity: 0.6;
+}
+
+.about-social-icons {
+  margin-top: 10px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 14px;
+}
+
+.about-social-btn {
+  width: 42px;
+  height: 42px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.06);
+  transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+}
+
+.about-social-btn:hover {
+  transform: translateY(-2px);
+  border-color: rgba(37, 99, 235, 0.65);
+  background: rgba(37, 99, 235, 0.12);
+}
+
+.about-social-btn img {
+  width: 20px;
+  height: 20px;
+  opacity: 0.95;
 }
 
 .about-support-row {
