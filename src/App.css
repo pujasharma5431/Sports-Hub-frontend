@@ -2320,6 +2320,16 @@ button { cursor: pointer; border: none; background: transparent; transition: 0.2
     font-size: 16px;
     margin-bottom: 32px;
   }
+
+  .home-feature-cards {
+    grid-template-columns: 1fr !important;
+    gap: 16px !important;
+  }
+
+  .home-feature-cards .pd-panel {
+    padding: 22px !important;
+    border-radius: 18px;
+  }
 }
 
 @media (max-width: 480px) {
@@ -2353,9 +2363,29 @@ button { cursor: pointer; border: none; background: transparent; transition: 0.2
   }
 
   /* Footer inline grid override on small screens */
-  .site-footer > .container {
-    grid-template-columns: 1fr !important;
+  .site-footer .container:first-of-type {
+    display: flex !important;
+    flex-direction: column !important;
+    grid-template-columns: unset !important;
     justify-items: center;
+    justify-content: center;
+    align-items: center;
     text-align: center;
+  }
+
+  .site-footer .container:first-of-type .footer-links-sec {
+    width: 100% !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    text-align: center !important;
+  }
+
+  .site-footer .container:first-of-type ul {
+    width: 100% !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    text-align: center !important;
   }
 }

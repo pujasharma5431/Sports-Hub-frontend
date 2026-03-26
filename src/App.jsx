@@ -198,7 +198,7 @@ const Home = () => {
       </section>
 
       <div className="container" style={{ margin: '120px auto' }}>
-        <div className="grid grid-cols-3" style={{ gap: 40 }}>
+        <div className="grid grid-cols-3 home-feature-cards" style={{ gap: 40 }}>
           <div className="pd-panel" style={{ textAlign: 'center', padding: 40, border: '1px solid var(--border)' }}>
             <div style={{ background: 'rgba(37, 99, 235, 0.1)', width: 80, height: 80, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px' }}>
                 <ShieldCheck size={40} style={{ color: 'var(--primary-accent)' }} />
