@@ -987,6 +987,58 @@ button { cursor: pointer; border: none; background: transparent; transition: 0.2
   font-size: 12px;
 }
 
+.product-share-btn {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transform: translateY(10px);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 5;
+}
+
+.product-card:hover .product-share-btn {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.product-share-btn:hover {
+  background: var(--primary-accent);
+  border-color: var(--primary-accent);
+  transform: scale(1.1) !important;
+}
+
+.pd-share-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--surface-alt);
+  color: var(--text-main);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+}
+
+.pd-share-btn:hover {
+  color: var(--primary-accent);
+  border-color: var(--primary-accent);
+  background: rgba(37, 99, 235, 0.1);
+  transform: rotate(15deg);
+}
+
 /* Cart & Badge */
 .badge-cart {
   position: absolute;

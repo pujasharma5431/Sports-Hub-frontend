@@ -1,6 +1,6 @@
 import React, { useMemo, useState, useEffect, useRef, createContext, useContext, useCallback } from 'react'
 import { BrowserRouter as Router, Routes, Route, Link, NavLink, Navigate, useNavigate, useLocation } from 'react-router-dom'
-import { ShoppingCart, User, Search, MessageCircle, Menu, X, Plus, Trash, Check, Truck, Package, Clock, ShieldCheck, ChevronRight, LayoutDashboard, Shirt, FileText, ClipboardList, ArrowUpDown, ChevronDown, Edit, Trash2, GripVertical, Sun, Moon, Download, Mail, Phone, Heart } from 'lucide-react'
+import { ShoppingCart, User, Search, MessageCircle, Menu, X, Plus, Trash, Check, Truck, Package, Clock, ShieldCheck, ChevronRight, LayoutDashboard, Shirt, FileText, ClipboardList, ArrowUpDown, ChevronDown, Edit, Trash2, GripVertical, Sun, Moon, Download, Mail, Phone, Heart, Share2 } from 'lucide-react'
 import axios from 'axios'
 import './App.css'
 
@@ -83,7 +83,7 @@ const CartProvider = ({ children }) => {
   }, [cartNotice])
 
   return (
-    <CartContext.Provider value={{ cart, cartCount, cartNotice, addToCart, removeFromCart, updateQuantity, clearCart, total, isCartOpen, setIsCartOpen }}>
+    <CartContext.Provider value={{ cart, cartCount, cartNotice, setCartNotice, addToCart, removeFromCart, updateQuantity, clearCart, total, isCartOpen, setIsCartOpen }}>
       {children}
     </CartContext.Provider>
   )
@@ -715,8 +715,27 @@ const Shop = () => {
   )
 }
 
+const handleShareProduct = async (product, setNotice) => {
+  const shareData = {
+    title: product.name,
+    text: `Check out this ${product.name} on Elite Sports Hub!`,
+    url: `${window.location.origin}/product/${product.id}`
+  }
+
+  try {
+    if (navigator.share) {
+      await navigator.share(shareData)
+    } else {
+      await navigator.clipboard.writeText(shareData.url)
+      setNotice?.('Product link copied to clipboard!')
+    }
+  } catch (err) {
+    console.error('Error sharing:', err)
+  }
+}
+
 const ProductCard = ({ product, showFeaturedToggle = false, onToggleFeatured }) => {
-  const { addToCart } = useCart()
+  const { addToCart, setCartNotice } = useCart()
   const [added, setAdded] = useState(false)
   const addedTimer = useRef(null)
 
@@ -743,6 +762,17 @@ const ProductCard = ({ product, showFeaturedToggle = false, onToggleFeatured }) 
          {product.is_sale && (
            <div style={{ position: 'absolute', top: 8, right: 8, background: '#ff4444', color: '#fff', fontSize: 9, fontWeight: 900, padding: '2px 8px', borderRadius: 4 }}>SALE</div>
          )}
+         <button 
+           className="product-share-btn" 
+           onClick={(e) => {
+             e.preventDefault()
+             e.stopPropagation()
+             handleShareProduct(product, setCartNotice)
+           }}
+           aria-label="Share product"
+         >
+           <Share2 size={16} />
+         </button>
       </div>
       <div className="product-info">
         <div className="product-brand">{product.brand}</div>
@@ -797,7 +827,7 @@ const ProductDetail = () => {
   const [reviews, setReviews] = useState([])
   const [reviewForm, setReviewForm] = useState({ name: '', rating: 5, comment: '' })
   const [loading, setLoading] = useState(true)
-  const { addToCart } = useCart()
+  const { addToCart, setCartNotice } = useCart()
 
   useEffect(() => {
     const id = window.location.pathname.split('/').pop()
@@ -873,9 +903,18 @@ const ProductDetail = () => {
         </div>
 
         <div className="pd-info-card">
-          <div className="pd-heading-row">
+           <div className="pd-heading-row">
             <p className="pd-brand">{product.brand || 'Elite Sports Hub'}</p>
-            <span className="pd-badge">Bestseller</span>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <button 
+                className="btn-ghost pd-share-btn" 
+                onClick={() => handleShareProduct(product, setCartNotice)}
+                title="Share product"
+              >
+                <Share2 size={20} />
+              </button>
+              <span className="pd-badge">Bestseller</span>
+            </div>
           </div>
           <h1 className="pd-title" style={{ fontSize: 28, marginBottom: 8, fontWeight: 900 }}>{product.name}</h1>
           <div className="pd-price-rating-row" style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 16 }}>
