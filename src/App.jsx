@@ -50,9 +50,17 @@ const ProtectedRoute = ({ children }) => {
 const CartContext = createContext()
 const useCart = () => useContext(CartContext)
 const CartProvider = ({ children }) => {
-  const [cart, setCart] = useState([])
+  const [cart, setCart] = useState(() => {
+    const saved = localStorage.getItem('cart')
+    return saved ? JSON.parse(saved) : []
+  })
   const [isCartOpen, setIsCartOpen] = useState(false)
   const [cartNotice, setCartNotice] = useState('')
+
+  useEffect(() => {
+    localStorage.setItem('cart', JSON.stringify(cart))
+  }, [cart])
+
   const addToCart = (product, size, color, quantity = 1) => {
     const existing = cart.find(item => item.id === product.id && item.size === size && item.color === color)
     if (existing) {
@@ -740,6 +748,7 @@ const handleShareProduct = async (product, setNotice) => {
 const ProductCard = ({ product, showFeaturedToggle = false, onToggleFeatured }) => {
   const { addToCart, setCartNotice } = useCart()
   const [added, setAdded] = useState(false)
+  const [activeImgIdx, setActiveImgIdx] = useState(0)
   const addedTimer = useRef(null)
 
   useEffect(() => {
@@ -758,7 +767,19 @@ const ProductCard = ({ product, showFeaturedToggle = false, onToggleFeatured }) 
   return (
     <div className="product-card">
       <div className="product-image-container">
-        <img src={product.images[0] || 'https://images.unsplash.com/photo-1577224969296-c27e7cb3d676?q=80&w=300'} className="product-image" alt={product.name} />
+        <img 
+          src={(product.images && product.images[activeImgIdx]) || 'https://images.unsplash.com/photo-1577224969296-c27e7cb3d676?q=80&w=300'} 
+          className="product-image" 
+          alt={product.name} 
+          onClick={(e) => {
+            if (product.images && product.images.length > 1) {
+              e.preventDefault();
+              e.stopPropagation();
+              setActiveImgIdx((prev) => (prev + 1) % product.images.length);
+            }
+          }}
+          style={{ cursor: (product.images && product.images.length > 1) ? 'pointer' : 'default' }}
+        />
         {(product.is_limited || Object.values(product.stock || {}).some(v => v > 0 && v < 5)) && (
           <div style={{ position: 'absolute', top: 8, left: 8, background: '#ff9933', color: '#000', fontSize: 9, fontWeight: 900, padding: '2px 8px', borderRadius: 4, letterSpacing: '0.5px' }}>LIMITED STOCK</div>
         )}
@@ -797,6 +818,27 @@ const ProductCard = ({ product, showFeaturedToggle = false, onToggleFeatured }) 
               {added ? 'Added ✓' : 'Add Cart'}
             </button>
           </div>
+          <Link 
+            to={`/product/${product.id}`}
+            className="btn btn-primary" 
+            style={{ 
+              width: '100%', 
+              marginTop: 8, 
+              background: 'var(--text-main)', 
+              color: 'var(--background)',
+              fontWeight: 900,
+              fontSize: 12,
+              letterSpacing: 1,
+              borderRadius: 10,
+              height: 40,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              textDecoration: 'none'
+            }}
+          >
+            BUY NOW
+          </Link>
 
           {showFeaturedToggle && (
             <div style={{ display: 'flex', justifyContent: 'center', marginTop: 10 }}>
@@ -831,6 +873,7 @@ const ProductDetail = () => {
   const [reviewForm, setReviewForm] = useState({ name: '', rating: 5, comment: '' })
   const [loading, setLoading] = useState(true)
   const { addToCart, setCartNotice } = useCart()
+  const navigate = useNavigate()
 
   useEffect(() => {
     const id = window.location.pathname.split('/').pop()
@@ -892,6 +935,12 @@ const ProductDetail = () => {
             src={selectedImage}
             className="pd-main-image"
             alt={product.name}
+            onClick={() => {
+              if (galleryImages.length > 1) {
+                setActiveImg((prev) => (prev + 1) % galleryImages.length);
+              }
+            }}
+            style={{ cursor: galleryImages.length > 1 ? 'pointer' : 'default' }}
             onError={(e) => {
               e.currentTarget.src = 'https://images.unsplash.com/photo-1577224969296-c27e7cb3d676?q=80&w=1200'
             }}
@@ -971,7 +1020,7 @@ const ProductDetail = () => {
             </div>
           </div>
 
-          <div className="pd-purchase-grid">
+          <div className="pd-purchase-grid" style={{ display: 'grid', gridTemplateColumns: 'min-content 1fr', gap: 12 }}>
             <div className="pd-qty">
               <button type="button" onClick={() => setQuantity(q => Math.max(1, q - 1))}>-</button>
               <span>{quantity}</span>
@@ -986,7 +1035,27 @@ const ProductDetail = () => {
             </button>
           </div>
 
-          <div className="pd-stock" style={{ marginTop: 8, fontSize: 12 }}>
+          <button 
+            className="btn btn-primary pd-buy-now-btn" 
+            onClick={() => {
+              addToCart(product, size, color, quantity)
+              navigate('/checkout')
+            }}
+            style={{ 
+              width: '100%', 
+              marginTop: 12, 
+              background: 'var(--text-main)', 
+              color: 'var(--background)',
+              fontWeight: 900,
+              fontSize: 16,
+              letterSpacing: 1.5,
+              height: 52
+            }}
+          >
+            BUY NOW
+          </button>
+
+          <div className="pd-stock" style={{ marginTop: 12, fontSize: 12 }}>
             {Number(product.stock?.[size] || 0) > 0 ? (
               <span>Only {product.stock?.[size]} items left in stock – Order soon!</span>
             ) : (
@@ -1170,6 +1239,7 @@ const Cart = () => {
 const Checkout = () => {
   const { cart, total, clearCart } = useCart()
   const [orderData, setOrderData] = useState({ customer_name: '', phone: '', email: '', district: '', location: '', landmark: '', payment_method: 'COD' })
+  const [step, setStep] = useState(1)
   const navigate = useNavigate()
 
   // List of districts in Nepal
@@ -1203,13 +1273,63 @@ const Checkout = () => {
     }
   }
 
+  if (step === 1) {
+    return (
+      <div className="container" style={{ padding: '80px 20px', textAlign: 'center' }}>
+        <div className="pd-panel" style={{ maxWidth: 500, margin: '0 auto', padding: '40px 32px', borderRadius: 24, boxShadow: 'var(--shadow-lg)' }}>
+          <div style={{ background: 'rgba(37,99,235,0.1)', width: 60, height: 60, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
+             <FileText size={30} style={{ color: 'var(--primary-accent)' }} />
+          </div>
+          <h2 style={{ fontSize: 24, fontWeight: 900, marginBottom: 10 }}>Review Your Order</h2>
+          <p style={{ color: 'var(--text-dim)', fontSize: 14, marginBottom: 30 }}>Please confirm your order details and total before we proceed.</p>
+          
+          <div style={{ textAlign: 'left', marginBottom: 30, background: 'var(--background)', padding: 20, borderRadius: 16, border: '1px solid var(--border)' }}>
+             <h3 style={{ fontSize: 13, textTransform: 'uppercase', letterSpacing: 1.5, color: 'var(--text-dim)', marginBottom: 16, fontWeight: 800 }}>Order Items</h3>
+             {cart.map((item, i) => (
+               <div key={i} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12, fontSize: 13, background: 'var(--background-alt)', padding: '10px 12px', borderRadius: 10, border: '1px solid var(--border)' }}>
+                 <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                   <span style={{ color: 'var(--text-main)', fontWeight: 700, fontSize: 14 }}>{item.name}</span>
+                   <span style={{ color: 'var(--text-dim)', fontSize: 11 }}>Size: {item.size} • Variation: {item.color || 'Home'} • Qty: {item.quantity}</span>
+                 </div>
+                 <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                    <span style={{ fontWeight: 800, color: 'var(--primary-accent)', fontSize: 14 }}>Rs. {((item.discount_price && item.discount_price > 0 ? item.discount_price : item.price) * item.quantity).toLocaleString()}</span>
+                 </div>
+               </div>
+             ))}
+             <div style={{ height: 1, background: 'var(--border)', margin: '20px 0' }} />
+             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, fontSize: 13, color: 'var(--text-dim)' }}>
+               <span>Subtotal</span>
+               <span>Rs. {total.toLocaleString()}</span>
+             </div>
+             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, fontSize: 13, color: 'var(--text-dim)' }}>
+               <span>Delivery Charge</span>
+               <span>Rs. 170</span>
+             </div>
+             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 18, fontWeight: 900, marginTop: 15, color: 'var(--primary-accent)' }}>
+               <span>Grand Total</span>
+               <span>Rs. {(total + 170).toLocaleString()}</span>
+             </div>
+          </div>
+          
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr', gap: 12 }}>
+            <button type="button" className="btn btn-outline" onClick={() => navigate(-1)} style={{ padding: '14px' }}>BACK</button>
+            <button type="button" className="btn btn-primary" onClick={() => setStep(2)} style={{ padding: '14px', letterSpacing: 1 }}>PROCEED TO CHECKOUT</button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="container" style={{ paddingBottom: 60 }}>
       {/* Flattened Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 20, marginBottom: 20 }}>
         <div>
+          <button onClick={() => setStep(1)} className="btn-ghost" style={{ padding: 0, fontSize: 12, color: 'var(--primary-accent)', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
+             &lsaquo; Back to Summary
+          </button>
           <h1 style={{ fontSize: 24, fontWeight: 900, margin: 0 }}>Secure Checkout</h1>
-          <p style={{ color: 'var(--text-dim)', fontSize: 13, margin: 0 }}>Step 3 of 3: Payment & Delivery</p>
+          <p style={{ color: 'var(--text-dim)', fontSize: 13, margin: 0 }}>Step 2 of 2: Payment & Delivery</p>
         </div>
         <div style={{ fontSize: 13, display: 'flex', gap: 16 }}>
           <span style={{ color: '#10b981', fontWeight: 700 }}>● Secure Server</span>
@@ -1318,7 +1438,6 @@ const Checkout = () => {
               <div style={{ display: 'grid', gap: 8 }}>
                 {[
                   { id: 'COD', label: 'Cash on Delivery', sub: 'Inc. Rs. 170 Charge' },
-                  { id: 'QR', label: 'E-Banking QR', sub: 'Secure Mobile Banking' },
                   { id: 'Esewa', label: 'eSewa Wallet', sub: 'Instant Wallet Payment' }
                 ].map(pm => (
                   <button
@@ -1344,22 +1463,6 @@ const Checkout = () => {
                 ))}
               </div>
 
-              {orderData.payment_method === 'QR' && (
-                <div style={{ background: 'var(--background)', border: '1px solid var(--border)', padding: '16px 12px', borderRadius: 14, textAlign: 'center', marginTop: 16 }}>
-                  <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--text-dim)', letterSpacing: 1.5, marginBottom: 10 }}>SCAN TO PAY · FONEPAY</div>
-                  <img
-                    src="/fonepay-qr.jpg"
-                    alt="Fonepay QR Code"
-                    style={{ width: 170, height: 'auto', borderRadius: 10, border: '3px solid var(--border)', display: 'block', margin: '0 auto 12px' }}
-                  />
-                  <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--text-main)', marginBottom: 2 }}>ELITE SPORTS HUB</div>
-                  <div style={{ fontSize: 10, color: 'var(--text-dim)' }}>Terminal: 2222060016219877</div>
-                  <div style={{ fontSize: 10, color: 'var(--text-dim)', marginBottom: 10 }}>Branch: HORIZONCHOWK</div>
-                  <div style={{ fontSize: 10, background: 'rgba(16,185,129,0.1)', color: '#10b981', padding: '6px 12px', borderRadius: 8, fontWeight: 700 }}>
-                    📸 Screenshot your payment receipt and keep it safe
-                  </div>
-                </div>
-              )}
 
               <button type="submit" className="btn btn-primary" style={{ width: '100%', padding: 16, marginTop: 24, fontSize: 14, letterSpacing: 1 }}>
                 CONFIRM & PAY RS. {(total + 170).toLocaleString()}
@@ -2028,7 +2131,16 @@ const AdminProducts = () => {
               </div>
             </div>
             <h4 className="admin-product-name">{p.name}</h4>
-            <p className="admin-product-price">Rs. {p.price}</p>
+            <div className="admin-product-price-wrapper" style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+              {p.discount_price ? (
+                <>
+                  <p className="admin-product-price" style={{ color: 'var(--primary-accent)', fontWeight: 800 }}>Rs. {p.discount_price}</p>
+                  <p className="admin-product-price-old" style={{ textDecoration: 'line-through', color: 'var(--text-dim)', fontSize: 12 }}>Rs. {p.price}</p>
+                </>
+              ) : (
+                <p className="admin-product-price" style={{ fontWeight: 800 }}>Rs. {p.price}</p>
+              )}
+            </div>
 
             <div className="admin-featured-heart-wrap">
               <button
