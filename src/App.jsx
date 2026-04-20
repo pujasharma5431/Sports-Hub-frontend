@@ -1,6 +1,6 @@
 import React, { useMemo, useState, useEffect, useRef, createContext, useContext, useCallback } from 'react'
 import { BrowserRouter as Router, Routes, Route, Link, NavLink, Navigate, useNavigate, useLocation } from 'react-router-dom'
-import { ShoppingCart, User, Search, MessageCircle, Menu, X, Plus, Trash, Check, Truck, Package, Clock, ShieldCheck, ChevronRight, LayoutDashboard, Shirt, FileText, ClipboardList, ArrowUpDown, ChevronDown, Edit, Trash2, GripVertical, Sun, Moon, Download, Mail, Phone, Heart, Share2, MapPin } from 'lucide-react'
+import { ShoppingCart, User, Search, MessageCircle, Menu, X, Plus, Trash, Check, Truck, Package, Clock, ShieldCheck, ChevronRight, LayoutDashboard, Shirt, FileText, ClipboardList, ArrowUpDown, ChevronDown, Edit, Trash2, GripVertical, Sun, Moon, Download, Mail, Phone, Heart, Share2, MapPin, Copy } from 'lucide-react'
 import axios from 'axios'
 import './App.css'
 
@@ -1265,8 +1265,18 @@ const Checkout = () => {
         price: (item.discount_price && item.discount_price > 0) ? item.discount_price : item.price
       }));
       const res = await axios.post(`${API_URL}/orders`, { ...orderData, items: mappedItems, total_amount: total + 170 })
+      const orderId = res.data.id;
       clearCart()
-      navigate('/order-success', { state: { orderId: res.data.id } })
+
+      if (orderData.payment_method === 'Esewa') {
+        const addressStr = `${orderData.district}, ${orderData.location} (${orderData.landmark})`;
+        const message = `Name: ${orderData.customer_name}\nAddress: ${addressStr}\nPhone no: ${orderData.phone}\nEmail: ${orderData.email || 'N/A'}\nPayment to be done through eSewa`;
+        const encodedMsg = encodeURIComponent(message);
+        const whatsappUrl = `https://wa.me/9779821952621?text=${encodedMsg}`;
+        window.open(whatsappUrl, '_blank');
+      }
+
+      navigate('/order-success', { state: { orderId } })
     } catch (err) {
       console.error(err)
       alert('Error placing order')
@@ -1462,6 +1472,19 @@ const Checkout = () => {
                   </button>
                 ))}
               </div>
+ 
+              {orderData.payment_method === 'Esewa' && (
+                <div style={{ background: 'var(--background)', border: '1px solid var(--border)', padding: '16px 12px', borderRadius: 14, marginTop: 16 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-main)', marginBottom: 12, borderBottom: '1px solid var(--border)', paddingBottom: 8 }}>Order Summary for eSewa</div>
+                  <div style={{ fontSize: 12, color: 'var(--text-main)', display: 'grid', gap: 6 }}>
+                    <div><strong>Name:</strong> {orderData.customer_name}</div>
+                    <div><strong>Address:</strong> {orderData.district}, {orderData.location} ({orderData.landmark})</div>
+                    <div><strong>Phone no:</strong> {orderData.phone}</div>
+                    <div><strong>Email:</strong> {orderData.email || 'N/A'}</div>
+                    <div style={{ marginTop: 6, color: 'var(--primary-accent)', fontWeight: 800 }}>Payment to be done through eSewa</div>
+                  </div>
+                </div>
+              )}
 
 
               <button type="submit" className="btn btn-primary" style={{ width: '100%', padding: 16, marginTop: 24, fontSize: 14, letterSpacing: 1 }}>
@@ -1575,9 +1598,69 @@ const AdminOrders = () => {
     if (selectedOrder?.id === id) setSelectedOrder({ ...selectedOrder, status })
   }
 
+  const moveOrderToDeleted = async (id) => {
+    if (!window.confirm('Move this order to Deleted Orders?')) return
+    try {
+      await axios.put(`${API_URL}/admin/orders/${id}/status`, { status: 'done' })
+    } catch (err) {
+      alert('Error deleting order: ' + (err.response?.data?.error || err.message))
+      return
+    }
+    setOrders(prev => prev.filter(o => o.id !== id))
+    if (selectedOrder?.id === id) setSelectedOrder(null)
+  }
+
+  const formatNepalDateTime = (value) => {
+    if (!value) return 'N/A'
+    const d = new Date(value)
+    if (Number.isNaN(d.getTime())) return 'N/A'
+    return d.toLocaleString('en-GB', {
+      timeZone: 'Asia/Kathmandu',
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true
+    })
+  }
+
+  const buildQuickShareText = (order) => {
+    const addressLine = [order.district, order.location].filter(Boolean).join(', ')
+    const landmarkPart = order.landmark ? ` (${order.landmark})` : ''
+    return `Name: ${order.customer_name || 'N/A'}
+Address: ${addressLine || 'N/A'}${landmarkPart}
+Phone no: ${order.phone || 'N/A'}
+Email: ${order.email || 'N/A'}
+Date: ${formatNepalDateTime(order.created_at)}
+(through website)`
+  }
+
+  const copyQuickShareText = async (order) => {
+    const text = buildQuickShareText(order)
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text)
+      } else {
+        const temp = document.createElement('textarea')
+        temp.value = text
+        temp.setAttribute('readonly', '')
+        temp.style.position = 'absolute'
+        temp.style.left = '-9999px'
+        document.body.appendChild(temp)
+        temp.select()
+        document.execCommand('copy')
+        document.body.removeChild(temp)
+      }
+    } catch (_err) {}
+  }
+
   const sortedOrders = useMemo(() => {
     return [...orders]
-      .filter(o => o.status !== 'done')
+      .filter(o => {
+        const status = (o.status || '').toLowerCase()
+        return status !== 'done' && status !== 'permanently_deleted'
+      })
       .sort((a, b) => {
         const priority = {
           'Order Received': 1,
@@ -1608,8 +1691,10 @@ const AdminOrders = () => {
               <th style={{ width: 160 }}>CUSTOMER</th>
               <th style={{ width: 80, textAlign: 'center' }}>ITEMS</th>
               <th style={{ width: 110, textAlign: 'right' }}>TOTAL</th>
+              <th style={{ width: 170, textAlign: 'center' }}>RECEIVED (NPT)</th>
               <th style={{ width: 100, textAlign: 'center' }}>STATUS</th>
               <th style={{ width: 120, textAlign: 'center' }}>ACTION</th>
+              <th style={{ width: 110, textAlign: 'center' }}>DELETE</th>
               <th style={{ width: 90, textAlign: 'center', paddingRight: 24 }}>INVOICE</th>
             </tr>
           </thead>
@@ -1629,6 +1714,9 @@ const AdminOrders = () => {
                   </td>
                   <td style={{ fontSize: 12, textAlign: 'center', color: 'var(--text-dim)' }}>{o.items.length} {o.items.length === 1 ? 'item' : 'items'}</td>
                   <td style={{ fontWeight: 800, fontSize: 13, textAlign: 'right' }}>Rs. {o.total_amount.toLocaleString()}</td>
+                  <td style={{ fontSize: 11, textAlign: 'center', color: 'var(--text-dim)', whiteSpace: 'nowrap' }}>
+                    {formatNepalDateTime(o.created_at)}
+                  </td>
                   <td style={{ textAlign: 'center' }}>
                     <span className={`status-badge status-${(o.status || 'pending').toLowerCase().replace(/\s+/g, '-')}`} style={{ fontSize: 10, padding: '3px 10px', textTransform: 'capitalize', display: 'inline-block' }}>{o.status}</span>
                   </td>
@@ -1647,6 +1735,17 @@ const AdminOrders = () => {
                         <option value="Order Completed">Order Completed</option>
                         <option value="done">Done</option>
                       </select>
+                    </div>
+                  </td>
+                  <td style={{ textAlign: 'center' }}>
+                    <div onClick={e => e.stopPropagation()}>
+                      <button
+                        onClick={() => moveOrderToDeleted(o.id)}
+                        className="btn-ghost"
+                        style={{ color: '#ff4444', padding: '6px 10px', border: '1px solid rgba(255,68,68,0.2)', borderRadius: 8, fontSize: 11, fontWeight: 700 }}
+                      >
+                        Delete
+                      </button>
                     </div>
                   </td>
                   <td style={{ textAlign: 'center', paddingRight: 24 }}>
@@ -1676,7 +1775,7 @@ const AdminOrders = () => {
                 </tr>
                 {selectedOrder?.id === o.id && (
                   <tr className="order-details-expanded">
-                    <td colSpan="7" style={{ padding: '0 24px 32px 24px' }}>
+                    <td colSpan="8" style={{ padding: '0 24px 32px 24px' }}>
                       <div style={{ 
                         background: 'var(--surface)', 
                         border: '1px solid var(--border)', 
@@ -1730,6 +1829,24 @@ const AdminOrders = () => {
                                   </div>
                                 </div>
                               </div>
+                            </div>
+
+                            <div style={{ marginBottom: 28 }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                                <h5 style={{ fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--text-dim)', fontWeight: 900 }}>Quick Share Format</h5>
+                                <button
+                                  onClick={() => copyQuickShareText(o)}
+                                  className="btn-ghost"
+                                  style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 10px', border: '1px solid var(--border)', borderRadius: 8, fontSize: 11, fontWeight: 700 }}
+                                  title="Copy details"
+                                >
+                                  <Copy size={13} />
+                                  Copy
+                                </button>
+                              </div>
+                              <pre style={{ margin: 0, whiteSpace: 'pre-wrap', background: 'var(--background)', border: '1px solid var(--border)', borderRadius: 12, padding: 12, fontSize: 12, lineHeight: 1.55, fontFamily: 'monospace' }}>
+{buildQuickShareText(o)}
+                              </pre>
                             </div>
 
                             <div>
@@ -2416,38 +2533,80 @@ const DynamicPage = () => {
 const AdminDeletedItems = () => {
   const [orders, setOrders] = useState([])
   const [showInvoice, setShowInvoice] = useState(null)
+  const [selectedOrderIds, setSelectedOrderIds] = useState([])
+  const getOrderId = (o) => (o?._id || o?.id || '').toString()
 
-  useEffect(() => {
-    axios.get(`${API_URL}/admin/orders`).then(res => {
-      setOrders(res.data.filter(o => o.status === 'done'))
-    })
+  const fetchDeletedOrders = useCallback(() => {
+    axios.get(`${API_URL}/admin/orders`)
+      .then(res => {
+        setOrders((res.data || []).filter(o => {
+          const status = (o.status || '').toLowerCase()
+          return status === 'done'
+        }))
+      })
+      .catch(err => {
+        alert('Error loading deleted orders: ' + (err.response?.data?.error || err.message))
+      })
   }, [])
 
-  const deletePermanently = async (id) => {
-    if (!window.confirm('Are you sure you want to permanently delete this order? This action cannot be undone.')) return
+  useEffect(() => {
+    fetchDeletedOrders()
+  }, [fetchDeletedOrders])
+
+  const markAsPermanentlyDeleted = async (id) => {
+    await axios.put(`${API_URL}/admin/orders/${id}/status`, { status: 'permanently_deleted' })
+  }
+
+  const deletePermanently = async (id, skipConfirm = false) => {
+    if (!skipConfirm && !window.confirm('Are you sure you want to permanently delete this order? This action cannot be undone.')) return
     try {
-      console.log('Attempting to delete order:', id);
-      await axios.delete(`${API_URL}/admin/orders/${id}`)
-      setOrders(orders.filter(o => {
-        const oId = (o._id || o.id).toString();
-        return oId !== id.toString();
-      }))
+      await markAsPermanentlyDeleted(id)
+      setOrders(prev => prev.filter(o => getOrderId(o) !== id.toString()))
     } catch (err) {
-      console.error('Delete failed:', err);
       alert('Error deleting order: ' + (err.response?.data?.error || err.message))
+    }
+  }
+
+  const toggleSelectOrder = (id) => {
+    setSelectedOrderIds(prev => (
+      prev.includes(id)
+        ? prev.filter(selectedId => selectedId !== id)
+        : [...prev, id]
+    ))
+  }
+
+  const selectAllOrders = () => {
+    setSelectedOrderIds(orders.map(o => getOrderId(o)))
+  }
+
+  const clearAllSelections = () => {
+    setSelectedOrderIds([])
+  }
+
+  const deleteSelectedPermanently = async () => {
+    if (selectedOrderIds.length === 0) return
+    if (!window.confirm(`Delete ${selectedOrderIds.length} selected order(s) permanently?`)) return
+
+    const idsToDelete = [...selectedOrderIds]
+    const results = await Promise.allSettled(idsToDelete.map(id => markAsPermanentlyDeleted(id)))
+    const failed = results
+      .map((result, index) => ({ result, id: idsToDelete[index] }))
+      .filter(x => x.result.status === 'rejected')
+      .map(x => x.id)
+
+    setOrders(prev => prev.filter(o => !idsToDelete.includes(getOrderId(o))))
+    setSelectedOrderIds(failed)
+
+    if (failed.length > 0) {
+      alert(`${failed.length} order(s) could not be deleted. Please try again.`)
     }
   }
 
   const restoreOrder = async (id) => {
     try {
-      console.log('Attempting to restore order:', id);
       await axios.put(`${API_URL}/admin/orders/${id}/status`, { status: 'Order Received' })
-      setOrders(orders.filter(o => {
-        const oId = (o._id || o.id).toString();
-        return oId !== id.toString();
-      }))
+      setOrders(prev => prev.filter(o => getOrderId(o) !== id.toString()))
     } catch (err) {
-      console.error('Restore failed:', err);
       alert('Error restoring order: ' + (err.response?.data?.error || err.message))
     }
   }
@@ -2455,14 +2614,58 @@ const AdminDeletedItems = () => {
   return (
     <AdminLayout>
       <div className="admin-header" style={{ marginBottom: 20 }}>
-        <h1 style={{ fontSize: 24, margin: '0 0 4px 0' }}>Deleted Items</h1>
-        <p style={{ color: 'var(--text-dim)', fontSize: 13 }}>Archived orders marked as 'Done'.</p>
+        <h1 style={{ fontSize: 24, margin: '0 0 4px 0' }}>Deleted Orders</h1>
+        <p style={{ color: 'var(--text-dim)', fontSize: 13 }}>Orders moved from admin page. You can restore or permanently delete them.</p>
+      </div>
+
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 14, flexWrap: 'wrap' }}>
+        <button
+          onClick={selectAllOrders}
+          className="btn-ghost"
+          style={{ padding: '7px 12px', border: '1px solid var(--border)', borderRadius: 8, fontSize: 12, fontWeight: 700 }}
+        >
+          Select All
+        </button>
+        <button
+          onClick={clearAllSelections}
+          className="btn-ghost"
+          style={{ padding: '7px 12px', border: '1px solid var(--border)', borderRadius: 8, fontSize: 12, fontWeight: 700 }}
+        >
+          Clear Selection
+        </button>
+        <button
+          onClick={deleteSelectedPermanently}
+          className="btn-ghost"
+          disabled={selectedOrderIds.length === 0}
+          style={{
+            padding: '7px 12px',
+            border: '1px solid rgba(255,68,68,0.2)',
+            borderRadius: 8,
+            fontSize: 12,
+            fontWeight: 700,
+            color: '#ff4444',
+            opacity: selectedOrderIds.length === 0 ? 0.5 : 1,
+            cursor: selectedOrderIds.length === 0 ? 'not-allowed' : 'pointer'
+          }}
+        >
+          Delete Selected Forever
+        </button>
+        <span style={{ color: 'var(--text-dim)', fontSize: 12 }}>
+          {selectedOrderIds.length} selected
+        </span>
       </div>
 
       <div className="admin-orders-container" style={{ maxHeight: '75vh', overflowY: 'auto' }}>
         <table className="admin-table">
           <thead>
             <tr>
+              <th style={{ width: 50, textAlign: 'center' }}>
+                <input
+                  type="checkbox"
+                  checked={orders.length > 0 && selectedOrderIds.length === orders.length}
+                  onChange={(e) => e.target.checked ? selectAllOrders() : clearAllSelections()}
+                />
+              </th>
               <th style={{ paddingLeft: 24, width: 110 }}>REF</th>
               <th style={{ width: 160 }}>CUSTOMER</th>
               <th style={{ width: 110, textAlign: 'right' }}>TOTAL</th>
@@ -2473,6 +2676,13 @@ const AdminDeletedItems = () => {
           <tbody>
             {orders.map(o => (
               <tr key={o._id || o.id} style={{ height: 60 }}>
+                <td style={{ textAlign: 'center' }}>
+                  <input
+                    type="checkbox"
+                    checked={selectedOrderIds.includes((o._id || o.id).toString())}
+                    onChange={() => toggleSelectOrder((o._id || o.id).toString())}
+                  />
+                </td>
                 <td style={{ paddingLeft: 24 }}>
                   <span style={{ fontWeight: 800, fontSize: 11 }}>#{(o._id || o.id).toString().slice(-6).toUpperCase()}</span>
                 </td>
@@ -2511,7 +2721,7 @@ const AdminDeletedItems = () => {
             ))}
           </tbody>
         </table>
-        {orders.length === 0 && <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-dim)' }}>No deleted items found.</div>}
+        {orders.length === 0 && <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-dim)' }}>No deleted orders found.</div>}
       </div>
 
       {showInvoice && (
