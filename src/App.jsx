@@ -2,6 +2,8 @@ import React, { useMemo, useState, useEffect, useRef, createContext, useContext,
 import { BrowserRouter as Router, Routes, Route, Link, NavLink, Navigate, useNavigate, useLocation } from 'react-router-dom'
 import { ShoppingCart, User, Search, MessageCircle, Menu, X, Plus, Trash, Check, Truck, Package, Clock, ShieldCheck, ChevronRight, LayoutDashboard, Shirt, FileText, ClipboardList, ArrowUpDown, ChevronDown, Edit, Trash2, GripVertical, Sun, Moon, Download, Mail, Phone, Heart, Share2, MapPin, Copy } from 'lucide-react'
 import axios from 'axios'
+import html2canvas from 'html2canvas'
+import jsPDF from 'jspdf'
 import './App.css'
 
 // API Base URL
@@ -1267,16 +1269,12 @@ const Checkout = () => {
       const res = await axios.post(`${API_URL}/orders`, { ...orderData, items: mappedItems, total_amount: total + 170 })
       const orderId = res.data.id;
       clearCart()
-
-      if (orderData.payment_method === 'Esewa') {
-        const addressStr = `${orderData.district}, ${orderData.location} (${orderData.landmark})`;
-        const message = `Name: ${orderData.customer_name}\nAddress: ${addressStr}\nPhone no: ${orderData.phone}\nEmail: ${orderData.email || 'N/A'}\nPayment to be done through eSewa`;
-        const encodedMsg = encodeURIComponent(message);
-        const whatsappUrl = `https://wa.me/9779821952621?text=${encodedMsg}`;
-        window.open(whatsappUrl, '_blank');
-      }
-
-      navigate('/order-success', { state: { orderId } })
+      navigate('/order-success', {
+        state: {
+          orderId,
+          paymentMethod: orderData.payment_method
+        }
+      })
     } catch (err) {
       console.error(err)
       alert('Error placing order')
@@ -1513,6 +1511,7 @@ const Checkout = () => {
 const OrderSuccess = () => {
   const location = useLocation()
   const orderId = location.state?.orderId || "N/A"
+  const paymentMethod = location.state?.paymentMethod || "COD"
 
   return (
     <div className="container" style={{ padding: '60px 20px', textAlign: 'center' }}>
@@ -1530,6 +1529,11 @@ const OrderSuccess = () => {
           Thank you for choosing <span style={{ color: 'var(--primary-accent)', fontWeight: 800 }}>Elite Sports Hub</span>. <br />
           Your order is being processed.
         </p>
+        {paymentMethod === 'Esewa' && (
+          <div style={{ margin: '14px 0 12px', background: 'rgba(16, 185, 129, 0.12)', border: '1px solid rgba(16, 185, 129, 0.35)', color: '#059669', borderRadius: 12, padding: '10px 12px', fontSize: 13, fontWeight: 700 }}>
+            We will contact you soon for payment using eSewa. Thank you.
+          </div>
+        )}
 
         <p style={{ fontSize: 13, fontWeight: 800, color: 'var(--text-main)', marginBottom: 24, letterSpacing: 0.5 }}>
           ID: #ESH-{orderId.toString().slice(-6).toUpperCase()}
@@ -1628,12 +1632,15 @@ const AdminOrders = () => {
   const buildQuickShareText = (order) => {
     const addressLine = [order.district, order.location].filter(Boolean).join(', ')
     const landmarkPart = order.landmark ? ` (${order.landmark})` : ''
+    const esewaNote = (order.payment_method || '').toLowerCase() === 'esewa'
+      ? '\nNote: Wants to pay via eSewa. Please contact to confirm order.'
+      : ''
     return `Name: ${order.customer_name || 'N/A'}
 Address: ${addressLine || 'N/A'}${landmarkPart}
 Phone no: ${order.phone || 'N/A'}
 Email: ${order.email || 'N/A'}
 Date: ${formatNepalDateTime(order.created_at)}
-(through website)`
+(through website)${esewaNote}`
   }
 
   const copyQuickShareText = async (order) => {
@@ -1701,7 +1708,15 @@ Date: ${formatNepalDateTime(order.created_at)}
           <tbody>
             {sortedOrders.map(o => (
               <React.Fragment key={o.id}>
-                <tr className={`order-row-status-${o.status}`} style={{ cursor: 'pointer', height: 60 }} onClick={() => setSelectedOrder(selectedOrder?.id === o.id ? null : o)}>
+                <tr
+                  className={`order-row-status-${o.status}`}
+                  style={{
+                    cursor: 'pointer',
+                    height: 60,
+                    borderLeft: (o.payment_method || '').toLowerCase() === 'esewa' ? '4px solid #16a34a' : 'none'
+                  }}
+                  onClick={() => setSelectedOrder(selectedOrder?.id === o.id ? null : o)}
+                >
                   <td style={{ paddingLeft: 24 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       {selectedOrder?.id === o.id ? <ChevronDown size={13} style={{ color: 'var(--primary-accent)', flexShrink: 0 }} /> : <ChevronRight size={13} style={{ opacity: 0.25, flexShrink: 0 }} />}
@@ -1710,7 +1725,14 @@ Date: ${formatNepalDateTime(order.created_at)}
                   </td>
                   <td>
                     <div style={{ fontWeight: 700, fontSize: 13 }}>{o.customer_name}</div>
-                    <div style={{ fontSize: 10, color: 'var(--text-dim)', marginTop: 1 }}>{o.phone}</div>
+                    <div style={{ fontSize: 10, color: 'var(--text-dim)', marginTop: 1, display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span>{o.phone}</span>
+                      {(o.payment_method || '').toLowerCase() === 'esewa' && (
+                        <span style={{ fontSize: 9, fontWeight: 800, color: '#166534', background: 'rgba(22, 163, 74, 0.12)', border: '1px solid rgba(22, 163, 74, 0.35)', borderRadius: 999, padding: '1px 6px' }}>
+                          ESEWA
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td style={{ fontSize: 12, textAlign: 'center', color: 'var(--text-dim)' }}>{o.items.length} {o.items.length === 1 ? 'item' : 'items'}</td>
                   <td style={{ fontWeight: 800, fontSize: 13, textAlign: 'right' }}>Rs. {o.total_amount.toLocaleString()}</td>
@@ -1760,8 +1782,8 @@ Date: ${formatNepalDateTime(order.created_at)}
                             <FileText size={14} />
                           </button>
                           <button
-                            title="Download PDF"
-                            onClick={() => { setShowInvoice(o); setTimeout(() => window.print(), 300) }}
+                            title="Open Invoice"
+                            onClick={() => setShowInvoice(o)}
                             style={{ background: 'var(--primary-accent)', border: 'none', borderRadius: 8, padding: '5px 8px', cursor: 'pointer', color: '#fff', display: 'flex', alignItems: 'center' }}
                           >
                             <Download size={14} />
@@ -1945,7 +1967,59 @@ Date: ${formatNepalDateTime(order.created_at)}
 }
 
 const Invoice = ({ order, onClose }) => {
-  const handlePrint = () => window.print()
+  const invoiceBodyRef = useRef(null)
+  const toTitleCase = (text) => {
+    if (!text || typeof text !== 'string') return ''
+    return text
+      .toLowerCase()
+      .split(' ')
+      .filter(Boolean)
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ')
+  }
+
+  const handleSavePdf = async () => {
+    if (!invoiceBodyRef.current) return
+    try {
+      const canvas = await html2canvas(invoiceBodyRef.current, {
+        scale: 3,
+        useCORS: true,
+        backgroundColor: '#ffffff',
+        windowWidth: invoiceBodyRef.current.scrollWidth,
+        windowHeight: invoiceBodyRef.current.scrollHeight,
+        onclone: (doc) => {
+          const exportEl = doc.querySelector('.invoice-export-body')
+          if (exportEl) {
+            exportEl.style.filter = 'contrast(1.16) brightness(1.02)'
+            exportEl.style.opacity = '1'
+          }
+        }
+      })
+
+      const imgData = canvas.toDataURL('image/png')
+      const pxToMm = 0.264583
+      const pdfWidth = canvas.width * pxToMm
+      const pdfHeight = canvas.height * pxToMm
+      const orientation = pdfWidth > pdfHeight ? 'l' : 'p'
+      const pdf = new jsPDF({
+        orientation,
+        unit: 'mm',
+        format: [pdfWidth, pdfHeight],
+        compress: true
+      })
+      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight, undefined, 'FAST')
+
+      pdf.save(`invoice-${order.id.toString().slice(-6).toUpperCase()}.pdf`)
+    } catch (err) {
+      console.error('PDF save error:', err)
+      alert('Unable to save PDF. Please try again.')
+    }
+  }
+
+  const handlePrintInvoice = () => {
+    window.focus()
+    setTimeout(() => window.print(), 60)
+  }
 
   const capitalize = (s) => s ? s.charAt(0).toUpperCase() + s.slice(1) : ''
 
@@ -1963,10 +2037,16 @@ const Invoice = ({ order, onClose }) => {
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
           <button
-            onClick={handlePrint}
+            onClick={handleSavePdf}
             style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 18px', borderRadius: 10, fontSize: 13, fontWeight: 800, background: 'var(--primary-accent)', color: '#fff', border: 'none', cursor: 'pointer' }}
           >
             <Download size={15} /> Save PDF
+          </button>
+          <button
+            onClick={handlePrintInvoice}
+            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', borderRadius: 10, fontSize: 13, fontWeight: 800, background: '#f8fafc', color: '#111', border: '1px solid #d1d5db', cursor: 'pointer' }}
+          >
+            Print
           </button>
           <button onClick={onClose} style={{ padding: '8px 16px', borderRadius: 10, fontSize: 13, fontWeight: 700, background: '#f1f1f1', color: '#333', border: '1px solid #ddd', cursor: 'pointer' }}>
             Close
@@ -1975,7 +2055,7 @@ const Invoice = ({ order, onClose }) => {
       </div>
 
       {/* Printable invoice body */}
-      <div style={{ background: '#fff', color: '#1a1a1a' }}>
+      <div ref={invoiceBodyRef} className="invoice-export-body" style={{ background: '#fff', color: '#1a1a1a' }}>
         {/* Accent top stripe */}
         <div style={{ height: 6, background: 'var(--primary-accent)', width: '100%' }} />
 
@@ -1984,9 +2064,9 @@ const Invoice = ({ order, onClose }) => {
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <img src="/logo.png" style={{ height: 44, width: 'auto' }} alt="Elite Sports Hub" />
             <div>
-              <div style={{ fontSize: 10, color: '#999', fontWeight: 700, letterSpacing: 1, marginBottom: 1 }}>PAN: 141845067</div>
-              <div style={{ fontSize: 10, color: '#bbb' }}>Butwal-11, Devinagar, Sagarmatha Path</div>
-              <div style={{ fontSize: 10, color: '#bbb' }}>+977 9821952621</div>
+              <div style={{ fontSize: 10, color: '#3f3f46', fontWeight: 700, letterSpacing: 1, marginBottom: 1 }}>PAN: 141845067</div>
+              <div style={{ fontSize: 10, color: '#52525b', fontWeight: 600 }}>Butwal-11, Devinagar, Sagarmatha Path</div>
+              <div style={{ fontSize: 10, color: '#52525b', fontWeight: 600 }}>+977 9821952621</div>
             </div>
           </div>
           <div style={{ textAlign: 'right' }}>
@@ -2000,18 +2080,18 @@ const Invoice = ({ order, onClose }) => {
         {/* Billing & Shipping */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', padding: '16px 32px', gap: 24, borderBottom: '1px solid #eee', background: '#fafafa' }}>
           <div>
-            <div style={{ fontSize: 9, fontWeight: 800, color: '#aaa', letterSpacing: 2, marginBottom: 8 }}>BILL TO</div>
+            <div style={{ fontSize: 9, fontWeight: 800, color: '#52525b', letterSpacing: 2, marginBottom: 8 }}>BILL TO</div>
             <div style={{ fontSize: 15, fontWeight: 800, color: '#111', marginBottom: 3 }}>{order.customer_name}</div>
-            <div style={{ fontSize: 12, color: '#555' }}>{order.phone}</div>
-            <div style={{ fontSize: 12, color: '#555' }}>{order.email || 'No email'}</div>
+            <div style={{ fontSize: 12, color: '#27272a', fontWeight: 600 }}>{order.phone}</div>
+            <div style={{ fontSize: 12, color: '#27272a', fontWeight: 600 }}>{order.email || 'No email'}</div>
           </div>
           <div>
-            <div style={{ fontSize: 9, fontWeight: 800, color: '#aaa', letterSpacing: 2, marginBottom: 8 }}>SHIP TO</div>
-            <div style={{ fontSize: 12, color: '#333', lineHeight: 1.8 }}>
-              <span style={{ color: '#aaa', fontSize: 10 }}>District</span> &nbsp; <strong>{order.district}</strong><br />
-              <span style={{ color: '#aaa', fontSize: 10 }}>Address</span> &nbsp; <strong>{order.location}</strong><br />
-              <span style={{ color: '#aaa', fontSize: 10 }}>Landmark</span> &nbsp; <strong>{order.landmark || 'N/A'}</strong><br />
-              <span style={{ color: '#aaa', fontSize: 10 }}>Payment</span> &nbsp; <strong>{order.payment_method.toUpperCase()}</strong>
+            <div style={{ fontSize: 9, fontWeight: 800, color: '#52525b', letterSpacing: 2, marginBottom: 8 }}>SHIP TO</div>
+            <div style={{ fontSize: 12, color: '#27272a', lineHeight: 1.8 }}>
+              <span style={{ color: '#71717a', fontSize: 10, fontWeight: 700 }}>District</span> &nbsp; <strong>{toTitleCase(order.district)}</strong><br />
+              <span style={{ color: '#71717a', fontSize: 10, fontWeight: 700 }}>Address</span> &nbsp; <strong>{toTitleCase(order.location)}</strong><br />
+              <span style={{ color: '#71717a', fontSize: 10, fontWeight: 700 }}>Landmark</span> &nbsp; <strong>{toTitleCase(order.landmark || 'N/A')}</strong><br />
+              <span style={{ color: '#71717a', fontSize: 10, fontWeight: 700 }}>Payment</span> &nbsp; <strong>{order.payment_method.toUpperCase()}</strong>
             </div>
           </div>
         </div>
