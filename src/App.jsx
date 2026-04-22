@@ -1244,6 +1244,10 @@ const Checkout = () => {
   const [step, setStep] = useState(1)
   const navigate = useNavigate()
 
+  useEffect(() => {
+    setOrderData(prev => (prev.payment_method === 'Esewa' ? { ...prev, payment_method: 'COD' } : prev))
+  }, [])
+
   // List of districts in Nepal
   const districts = [
     "Kathmandu", "Lalitpur", "Bhaktapur", "Kaski", "Chitwan", "Morang", "Sunsari", "Jhapa",
@@ -1266,13 +1270,19 @@ const Checkout = () => {
         ...item,
         price: (item.discount_price && item.discount_price > 0) ? item.discount_price : item.price
       }));
-      const res = await axios.post(`${API_URL}/orders`, { ...orderData, items: mappedItems, total_amount: total + 170 })
+      const effectivePayment = orderData.payment_method === 'Esewa' ? 'COD' : orderData.payment_method
+      const res = await axios.post(`${API_URL}/orders`, {
+        ...orderData,
+        payment_method: effectivePayment,
+        items: mappedItems,
+        total_amount: total + 170
+      })
       const orderId = res.data.id;
       clearCart()
       navigate('/order-success', {
         state: {
           orderId,
-          paymentMethod: orderData.payment_method
+          paymentMethod: effectivePayment
         }
       })
     } catch (err) {
@@ -1444,45 +1454,44 @@ const Checkout = () => {
             <div className="pd-panel" style={{ padding: 22 }}>
               <h2 style={{ fontSize: 16, marginBottom: 16, fontWeight: 800 }}>3. Payment Method</h2>
               <div style={{ display: 'grid', gap: 8 }}>
-                {[
-                  { id: 'COD', label: 'Cash on Delivery', sub: 'Inc. Rs. 170 Charge' },
-                  { id: 'Esewa', label: 'eSewa Wallet', sub: 'Instant Wallet Payment' }
-                ].map(pm => (
-                  <button
-                    key={pm.id}
-                    type="button"
-                    onClick={() => setOrderData({ ...orderData, payment_method: pm.id })}
-                    style={{
-                      textAlign: 'left',
-                      padding: '12px 16px',
-                      borderRadius: 12,
-                      border: '2px solid',
-                      borderColor: orderData.payment_method === pm.id ? 'var(--primary-accent)' : 'var(--border)',
-                      background: orderData.payment_method === pm.id ? 'rgba(37, 99, 235, 0.05)' : 'var(--background)',
-                      transition: '0.15s'
-                    }}
-                  >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontWeight: 800, color: 'var(--text-main)', fontSize: 13 }}>{pm.label}</span>
-                      {orderData.payment_method === pm.id && <Check size={16} color="var(--primary-accent)" />}
-                    </div>
-                    <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 2 }}>{pm.sub}</div>
-                  </button>
-                ))}
-              </div>
- 
-              {orderData.payment_method === 'Esewa' && (
-                <div style={{ background: 'var(--background)', border: '1px solid var(--border)', padding: '16px 12px', borderRadius: 14, marginTop: 16 }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-main)', marginBottom: 12, borderBottom: '1px solid var(--border)', paddingBottom: 8 }}>Order Summary for eSewa</div>
-                  <div style={{ fontSize: 12, color: 'var(--text-main)', display: 'grid', gap: 6 }}>
-                    <div><strong>Name:</strong> {orderData.customer_name}</div>
-                    <div><strong>Address:</strong> {orderData.district}, {orderData.location} ({orderData.landmark})</div>
-                    <div><strong>Phone no:</strong> {orderData.phone}</div>
-                    <div><strong>Email:</strong> {orderData.email || 'N/A'}</div>
-                    <div style={{ marginTop: 6, color: 'var(--primary-accent)', fontWeight: 800 }}>Payment to be done through eSewa</div>
+                <button
+                  type="button"
+                  onClick={() => setOrderData({ ...orderData, payment_method: 'COD' })}
+                  style={{
+                    textAlign: 'left',
+                    padding: '12px 16px',
+                    borderRadius: 12,
+                    border: '2px solid',
+                    borderColor: orderData.payment_method === 'COD' ? 'var(--primary-accent)' : 'var(--border)',
+                    background: orderData.payment_method === 'COD' ? 'rgba(37, 99, 235, 0.05)' : 'var(--background)',
+                    transition: '0.15s'
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontWeight: 800, color: 'var(--text-main)', fontSize: 13 }}>Cash on Delivery</span>
+                    {orderData.payment_method === 'COD' && <Check size={16} color="var(--primary-accent)" />}
                   </div>
+                  <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 2 }}>Inc. Rs. 170 Charge</div>
+                </button>
+                <div
+                  aria-disabled
+                  style={{
+                    textAlign: 'left',
+                    padding: '12px 16px',
+                    borderRadius: 12,
+                    border: '2px dashed var(--border)',
+                    background: 'var(--surface-alt)',
+                    opacity: 0.85,
+                    cursor: 'not-allowed'
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
+                    <span style={{ fontWeight: 800, color: 'var(--text-dim)', fontSize: 13 }}>eSewa Wallet</span>
+                    <span style={{ fontSize: 10, fontWeight: 800, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: 0.5, whiteSpace: 'nowrap' }}>Coming soon</span>
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 4 }}>Online payment via eSewa will be available here soon.</div>
                 </div>
-              )}
+              </div>
 
 
               <button type="submit" className="btn btn-primary" style={{ width: '100%', padding: 16, marginTop: 24, fontSize: 14, letterSpacing: 1 }}>
@@ -1511,7 +1520,6 @@ const Checkout = () => {
 const OrderSuccess = () => {
   const location = useLocation()
   const orderId = location.state?.orderId || "N/A"
-  const paymentMethod = location.state?.paymentMethod || "COD"
 
   return (
     <div className="container" style={{ padding: '60px 20px', textAlign: 'center' }}>
@@ -1529,12 +1537,6 @@ const OrderSuccess = () => {
           Thank you for choosing <span style={{ color: 'var(--primary-accent)', fontWeight: 800 }}>Elite Sports Hub</span>. <br />
           Your order is being processed.
         </p>
-        {paymentMethod === 'Esewa' && (
-          <div style={{ margin: '14px 0 12px', background: 'rgba(16, 185, 129, 0.12)', border: '1px solid rgba(16, 185, 129, 0.35)', color: '#059669', borderRadius: 12, padding: '10px 12px', fontSize: 13, fontWeight: 700 }}>
-            We will contact you soon for payment using eSewa. Thank you.
-          </div>
-        )}
-
         <p style={{ fontSize: 13, fontWeight: 800, color: 'var(--text-main)', marginBottom: 24, letterSpacing: 0.5 }}>
           ID: #ESH-{orderId.toString().slice(-6).toUpperCase()}
         </p>
